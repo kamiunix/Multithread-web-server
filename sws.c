@@ -23,7 +23,6 @@
 struct args {
 	struct linkedlist* list;
 	int port;
-	char **argv;
 };
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
@@ -175,6 +174,7 @@ void *get_clients( void* vargs) {
 
 /* loop function to process clients using SJF */
 void *proc_sjf( void* list ) {
+	printf("Commencing SJF scheduling\n");
 	int flag = 0;
 	for( ;; ) {                                       /* main SJF loop */
 		while(length(list) > 0) {
@@ -197,6 +197,7 @@ void *proc_sjf( void* list ) {
 
 /* loop function to process clients using RR */
 void *proc_rr( void* list ) {
+	printf("Commencing RR scheduling\n");
 	for ( ;; ) {
 		//do stuff
 	}
@@ -204,6 +205,7 @@ void *proc_rr( void* list ) {
 
 /* loop function to process clients using MLFB */
 void *proc_mlfb( void* list ) {
+	printf("Commencing MLFB scheduling\n");
 	for ( ;; ) {
 		//do stuff
 	}
@@ -220,13 +222,36 @@ void *proc_mlfb( void* list ) {
  * Returns: an integer status code, 0 for success, something else for error.
  */
 int main( int argc, char **argv ) {
-	int port = (int) strtol(argv[1], (char**)NULL,10);
+	char* scheduler;
+	int port;
+	if (argc < 2) {
+		port = 38080;
+	}
+	if (argc < 3) {
+		scheduler = "SJF";
+	}
+	else {
+		port = (int) strtol(argv[1], (char**)NULL,10);
+		char *scheduler_list[3];
+		scheduler_list[0] = "SJF";
+		scheduler_list[1] = "RR";
+		scheduler_list[2] = "MLFB";
+		for(int i=0;i<3;i++) {
+			if (strcmp(argv[2],scheduler_list[i]) == 0) {
+				scheduler = argv[2];
+			}
+		}
+	}
+
+	if (scheduler == NULL) {
+		printf("Unrecognized scheduling algorithm\n Choices are : SJF RR MLFB\n");
+		exit(1);
+	}
 
 	struct linkedlist *list = (struct linkedlist*) malloc(sizeof(struct linkedlist));
 	initList(list);
 
 	struct args *args = (struct args*) malloc(sizeof(struct linkedlist));
-	args->argv = argv;
 	args->port = port;                                    /* server port # */
 	args->list = list;
 
@@ -234,11 +259,23 @@ int main( int argc, char **argv ) {
 	pthread_t get_reqs;
 	pthread_t send_files; 
 
-	printf("creating threads\n");
+	/* create request parsing thread */
 	pthread_create(&get_reqs, NULL, get_clients, (void*) args);
-	pthread_create(&send_files, NULL, proc_sjf, (void*) list);
 
-	printf("joined threads\n");
+	/* create SJF thread */
+	if (strcmp(scheduler, "SJF") == 0) {
+		pthread_create(&send_files, NULL, proc_sjf, (void*) list);
+	}
+	/* create RR thread */
+	else if (strcmp(scheduler, "RR") == 0) {
+		pthread_create(&send_files, NULL, proc_rr, (void*) list);
+	}
+	/* create MLFB thread */
+	else {
+		pthread_create(&send_files, NULL, proc_mlfb, (void*) list);
+	}
+
+	/* join threads*/
 	pthread_join(get_reqs, NULL);
 	pthread_join(send_files, NULL);
 }
