@@ -29,6 +29,9 @@ void printClient(struct client* client);
 //display the list
 void printList(struct linkedlist* list);
 
+//roate list puting header to tail. (for RR)
+void rotate(struct linkedlist* list);
+
 //insert link at the first location
 void insertFirst(struct linkedlist* list, struct client* client);
 

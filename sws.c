@@ -228,6 +228,7 @@ int main( int argc, char **argv ) {
 		port = 38080;
 	}
 	if (argc < 3) {
+		port = (int) strtol(argv[1], (char**)NULL,10);
 		scheduler = "SJF";
 	}
 	else {

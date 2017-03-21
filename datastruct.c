@@ -43,6 +43,12 @@ void printList(struct linkedlist* list) {
 	printf("]\n");
 }
 
+//rotate head to back of list (queue like functionality)
+void rotate(struct linkedlist* list) {
+	list->tail = list->head;
+	list->head = list->head->next;
+}
+
 //insert link at the first location
 void insertFirst(struct linkedlist* list, struct client* client) {
 	//create a link
@@ -211,7 +217,8 @@ void sort(struct linkedlist* list) {
 	}   
 }
 
-/* test harness
+/* test harness */
+/*
 int main() {
 	struct client *client1 = (struct client*) malloc(sizeof(struct client));
 	initClient(client1);
@@ -266,6 +273,8 @@ int main() {
 	printf("\n");
 	printf("sorting list by rem value\n");
 	sort(list);
+	printList(list);
+	rotate(list);
 	printList(list);
 }
 */
