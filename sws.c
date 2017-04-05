@@ -226,12 +226,29 @@ void *proc_mlfb( void* list ) {
 int main( int argc, char **argv ) {
 	char* scheduler;
 	int port;
+	int threads;
 	if (argc < 2) {
 		port = 38080;
+		scheduler = "SJF";
+		threads = 10;
 	}
-	if (argc < 3) {
+	else if (argc < 3) {
 		port = (int) strtol(argv[1], (char**)NULL,10);
 		scheduler = "SJF";
+		threads = 10;
+	}
+	else if (argc < 4) {
+		port = (int) strtol(argv[1], (char**)NULL,10);
+		char *scheduler_list[3];
+		scheduler_list[0] = "SJF";
+		scheduler_list[1] = "RR";
+		scheduler_list[2] = "MLFB";
+		for(int i=0;i<3;i++) {
+			if (strcmp(argv[2],scheduler_list[i]) == 0) {
+				scheduler = argv[2];
+			}
+		}
+		threads = 10;
 	}
 	else {
 		port = (int) strtol(argv[1], (char**)NULL,10);
@@ -244,6 +261,7 @@ int main( int argc, char **argv ) {
 				scheduler = argv[2];
 			}
 		}
+		threads = (int) strtol(argv[3], (char**)NULL,10);
 	}
 
 	if (scheduler == NULL) {
