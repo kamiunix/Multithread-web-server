@@ -13,6 +13,9 @@
 #include <unistd.h>
 #include <pthread.h> 
 #include <semaphore.h> 
+#include <time.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 #include "network.h"
 #include "datastruct.h"
@@ -182,14 +185,19 @@ void *get_clients( void* vargs) {
 void *proc_sjf( void* list ) {
 	printf("Commencing SJF scheduling\n");
 	int flag = 0;
+	srand(time(NULL));
 	for( ;; ) {                                       /* main SJF loop */
+		int r = rand() % 1000;
+		usleep(r);
 		while(length(list) > 0) {
 
 			//lock critical section
 			pthread_mutex_lock(&lock);
+
 			sort((struct linkedlist*) list);				/* sort to find shortest job */
 			struct client *client = deleteFirst((struct linkedlist*) list);
 			flag = 1;
+
 			pthread_mutex_unlock(&lock);
 			//unlock critical section
 
