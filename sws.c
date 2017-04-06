@@ -74,6 +74,8 @@ static void check_client( struct client* client ) {
 	} else {                                          /* if so, open file */
 		req++;                                          /* skip leading / */
 		client->fin = fopen( req, "r" );                        /* open file */
+		char *filename = (char*)malloc(sizeof(char)*128);
+		strncpy(filename,req,127);
 		if( !client->fin ) {                                    /* check if successful */
 			len = sprintf( buffer, "HTTP/1.1 404 File not found\n\n" );  
 			write( client->fd, buffer, len );                     /* if not, send err */
@@ -88,58 +90,56 @@ static void check_client( struct client* client ) {
 			len = ftell(client->fin);
 			rewind(client->fin);
 			client->rem = len;
+			strncpy(client->filename,filename,127);
+			printf("received request for file %s\n",client->filename);
 		}
 	}
 }
 
-static void serve_client( struct client* client, int mss ) {
-	static char *buffer;                              /* request buffer */
-	int len;                                          /* length of data read */
+static int serve_client( struct client* client, int mss ) {
+  static char *buffer;                              /* request buffer */
+  int len;                                          /* length of data read */
+  int n;                                            /* amount to send */
 
-	if( !buffer ) {                                   /* 1st time, alloc buffer */
-		buffer = malloc( MAX_HTTP_SIZE );
-		if( !buffer ) {                                 /* error check */
-			perror( "Error while allocating memory" );
-			abort();
-		}
-	}
+  if( !buffer ) {                                   /* 1st time, alloc buffer */
+    buffer = malloc( MAX_HTTP_SIZE );
+    if( !buffer ) {                                 /* error check */
+      perror( "error allocating memory" );
+      abort();
+    }
+  }
 
-	while( mss > MAX_HTTP_SIZE ) {                                          /* loop, read & send file */
-		len = fread( buffer, 1, MAX_HTTP_SIZE, client->fin );  /* read file chunk */
-		if( len < 0 ) {                             /* check for errors */
-			perror( "Error while writing to client" );
-		} else if( len > 0 ) {                      /* if none, send chunk */
-			len = write( client->fd, buffer, len );
-			if( len < 1 ) {                           /* check for errors */
-				perror( "Error while writing to client" );
-			} else {
-				mss = mss - len;
-				client->rem = client->rem - len;
-			}
-		}
-	}    
-	if ( mss > 0 ) {  										 /* last packet */
-		len = fread( buffer, 1, mss, client->fin );  /* read remaining chunk */
-		if( len < 0 ) {                             /* check for errors */
-			perror( "Error while writing to client" );
-		} else if( len > 0 ) {                      /* if none, send chunk */
-			len = write( client->fd, buffer, len );
-			if( len < 1 ) {                           /* check for errors */
-				perror( "Error while writing to client" );
-			} else {
-				mss = mss - len;
-				client->rem = client->rem - len;
-			}
-		}
-	}
-	/* file finished */
-	if ( client->rem == 0 ) {
-		len = fread( buffer, 1, 1, client->fin );  /* send eof */
-		len = write( client->fd, buffer, len );
-		client->rem = -1;
-		fclose( client->fin );
-		close( client->fd );                                     /* close client connectuin*/
-	}
+  n = mss;                                     /* compute send amount */
+  if( !n ) {                                         /* if 0, we're done */
+    return 0;
+  } else if( client->rem && ( client->rem < n ) ) {        /* if there is limit */
+    n = client->rem;                                    /* send upto the limit */
+  }
+  client->rem = client->rem - n;
+  client->pos = client->pos + n;				/* remember send size */
+
+  do {                                              /* loop, read & send file */
+    len = n < MAX_HTTP_SIZE ? n : MAX_HTTP_SIZE;    /* how much to read */
+    len = fread( buffer, 1, len, client->fin );         /* read file chunk */
+    if( len < 1 ) {                                 /* check for errors */
+      perror( "error reading file" );
+      return 0;
+    } else if( len > 0 ) {                          /* if none, send chunk */
+      len = write( client->fd, buffer, len );
+      if( len < 1 ) {                               /* check for errors */
+        perror( "error writing to client" );
+        return 0;
+      }
+      n -= len;
+    }
+  } while( ( n > 0 ) && ( len == MAX_HTTP_SIZE ) );  /* the last chunk < 8192 */
+  
+  if (client->rem == 0) {
+	  close(client->fd);
+	  fclose(client->fin);
+  }
+
+  return 1;
 }
 
 /* loop function to receive clients */
@@ -156,11 +156,10 @@ void *get_clients( void* vargs) {
 
 		for( fd = network_open(); fd >= 0; fd = network_open() ) { /* get clients */
 			if (flag) {
-				printf("got client\n");
 				client = (struct client*) malloc(sizeof(struct client));
 				initClient(client);
 				client->fd = fd;
-				check_client(client);                           /* process each client's request */
+				check_client(client);  /* process each client's request */
 				flag = 0;
 			}
 
@@ -180,9 +179,10 @@ void *proc_sjf( void* list ) {
 	int flag = 0;
 	for( ;; ) {                                       /* main SJF loop */
 		while(length(list) > 0) {
+
 			//lock critical section
 			pthread_mutex_lock(&lock);
-			sort((struct linkedlist*) list);										/* sort to find shortest job */
+			sort((struct linkedlist*) list);				/* sort to find shortest job */
 			struct client *client = deleteFirst((struct linkedlist*) list);
 			flag = 1;
 			pthread_mutex_unlock(&lock);
@@ -190,7 +190,9 @@ void *proc_sjf( void* list ) {
 
 			//send file to client
 			if (flag) {
+				int size = client->rem;
 				serve_client(client, client->rem);
+				printf("%p sent %d bytes of file %s\n",&client ,size, client->filename);
 				flag = 0;
 			}
 		}
@@ -200,17 +202,115 @@ void *proc_sjf( void* list ) {
 /* loop function to process clients using RR */
 void *proc_rr( void* list ) {
 	printf("Commencing RR scheduling\n");
+	int flag = 0;
+	int quantum = 8192; 
+ 	
 	for ( ;; ) {
-		//do stuff
+		
+		while(length(list) > 0) {
+			//lock critical section
+			pthread_mutex_lock(&lock);
+			
+			struct client *client = deleteFirst((struct linkedlist*) list);
+			//read from file in quantum
+						
+			flag = 1;
+			pthread_mutex_unlock(&lock);
+			//unlock critical section
+
+			//send file to client
+			if (flag) {
+				
+				if(client->rem < quantum){					
+					serve_client(client, client->rem);
+					printf("%p sent %d bytes of file %s\n",&client ,client->rem, client->filename);
+				}
+				else{
+					serve_client(client, quantum);
+					insertLast((struct linkedlist*) list,client);
+					printf("%p sent %d bytes of file %s\n",&client ,quantum, client->filename);
+				}
+				flag = 0;
+			}
+		}
 	}
 }
 
 /* loop function to process clients using MLFB */
 void *proc_mlfb( void* list ) {
 	printf("Commencing MLFB scheduling\n");
+	int flag = 0;
+	int count1;																	//Counter
+	int count2;																	//Goal
+	struct linkedlist *list2 = (struct linkedlist*) malloc(sizeof(struct linkedlist));	//List to hold clients for chunk 2
+	initList(list2);
+	struct linkedlist *list3 = (struct linkedlist*) malloc(sizeof(struct linkedlist));  //List to hold clients for chunk 3
+	initList(list3);
+
 	for ( ;; ) {
-		//do stuff
+		while(length(list) > 0) {												//Process the incoming client list for the first chunk.
+			pthread_mutex_lock(&lock);											//Critical section lock
+			flag = 0;															//Reset the flag
+			struct client *client = deleteFirst((struct linkedlist*) list);		//Pop a client from the incoming list
+			if(client->rem > 0){												//If there is data remaining for the client
+				if(client->rem > MLFB_FIRST){									//If the amount of file remaining is greater than the first chunk limit
+					insertLast((struct linkedlist*) list2,client);				//Add the client to the quantum 2 list
+				}
+				flag=1;															//Set the flag for this client
+			}
+			pthread_mutex_unlock(&lock);										//Critical section unlock
+			if (flag) {															//If flag is set, send data to the client
+				if(MLFB_FIRST>=MAX_HTTP_SIZE){									//If MLFB_FIRST is greater than MAX_HTTP_SIZE, then call client serve more than once
+					count2=MLFB_FIRST/MAX_HTTP_SIZE;
+				} else {
+					count2 = 1;
+				}
+				for (count1 = 1; count1<= count2; count1++){					//call serve enough times to send MLFB_FIRST bytes
+					serve_client(client, client->rem);							//Call the MLFB server for 1st chunk
+				}
+				flag = 0;														//Reset the flag
+			}
+		}																		//First chunks finished
+		while(length(list2) > 0) {												//Process list2 for the second chunk.
+			pthread_mutex_lock(&lock);											//Critical section lock
+			flag = 0;															//Reset the flag
+			struct client *client = deleteFirst((struct linkedlist*) list2);	//Pop a client from list2
+			if(client->rem > 0){												//If there is data remaining for the client
+				if(client->rem > MLFB_SECOND){									//If the amount of file remaining is greater than the first chunk limit
+					insertLast((struct linkedlist*) list3,client);				//Add the client to the quantum 3 list
+				}
+				flag=1;															//Set the flag for this client
+			}
+			pthread_mutex_unlock(&lock);										//Critical section unlock
+			if (flag) {															//If flag is set, send data to the client
+				if(MLFB_SECOND>=MAX_HTTP_SIZE){									//If MLFB_FIRST is greater than MAX_HTTP_SIZE, then call client serve more than once
+					count2=MLFB_SECOND/MAX_HTTP_SIZE;
+				} else {
+					count2 = 1;
+				}
+				for (count1 = 1; count1<= count2; count1++){					//call serve enough times to send MLFB_SECOND bytes
+					serve_client(client, client->rem);							//Call the MLFB server for 1st chunk
+				}
+				flag = 0;														//Reset the flag
+			}
+		}																		//First chunks finished
+		while(length(list3) > 0) {												//Process list3 for the last chunk.
+			pthread_mutex_lock(&lock);											//Critical section lock
+			flag = 0;															//Reset the flag
+			struct client *client = deleteFirst((struct linkedlist*) list3);	//Pop a client from list3
+			if(client->rem > 0){												//If there is data remaining for the client
+				insertLast((struct linkedlist*) list3,client);					//Put the client back into the end of the list
+				flag=1;															//Set the flag for this client
+			}
+			pthread_mutex_unlock(&lock);										//Critical section unlock
+			if (flag) {															//If flag is set, send data to the client
+				serve_client(client, client->rem);								//Call the MLFB server for 1st chunk
+				flag = 0;														//Reset the flag
+			}
+		}																		//First chunks finished
+
 	}
+	return;
 }
 
 /* This function is where the program starts running.
@@ -226,12 +326,31 @@ void *proc_mlfb( void* list ) {
 int main( int argc, char **argv ) {
 	char* scheduler;
 	int port;
+	int threads;
 	if (argc < 2) {
+		printf("usage: ./sws [PORT] [SCHEDULER] [THREADS]\n...\n");
+		printf("will run with default values\n");
 		port = 38080;
+		scheduler = "SJF";
+		threads = 1;
 	}
-	if (argc < 3) {
+	else if (argc < 3) {
 		port = (int) strtol(argv[1], (char**)NULL,10);
 		scheduler = "SJF";
+		threads = 1;
+	}
+	else if (argc < 4) {
+		port = (int) strtol(argv[1], (char**)NULL,10);
+		char *scheduler_list[3];
+		scheduler_list[0] = "SJF";
+		scheduler_list[1] = "RR";
+		scheduler_list[2] = "MLFB";
+		for(int i=0;i<3;i++) {
+			if (strcmp(argv[2],scheduler_list[i]) == 0) {
+				scheduler = argv[2];
+			}
+		}
+		threads = 1;
 	}
 	else {
 		port = (int) strtol(argv[1], (char**)NULL,10);
@@ -244,7 +363,10 @@ int main( int argc, char **argv ) {
 				scheduler = argv[2];
 			}
 		}
+		threads = (int) strtol(argv[3], (char**)NULL,10);
 	}
+
+	printf("port: %d scheduler: %s threads: %d\n",port,scheduler,threads);
 
 	if (scheduler == NULL) {
 		printf("Unrecognized scheduling algorithm\n Choices are : SJF RR MLFB\n");
@@ -260,25 +382,34 @@ int main( int argc, char **argv ) {
 
 	/* threads to receive requests and send file data */
 	pthread_t get_reqs;
-	pthread_t send_files; 
+	pthread_t *send_files = (pthread_t*)malloc(sizeof(pthread_t) * threads); 
 
 	/* create request parsing thread */
 	pthread_create(&get_reqs, NULL, get_clients, (void*) args);
 
 	/* create SJF thread */
 	if (strcmp(scheduler, "SJF") == 0) {
-		pthread_create(&send_files, NULL, proc_sjf, (void*) list);
+		for (int i=0; i<threads; i++) {
+			pthread_create(&send_files[i], NULL, proc_sjf, (void*) list);
+		}
 	}
 	/* create RR thread */
 	else if (strcmp(scheduler, "RR") == 0) {
-		pthread_create(&send_files, NULL, proc_rr, (void*) list);
+		for (int i=0; i<threads; i++) {
+			pthread_create(&send_files[i], NULL, proc_rr, (void*) list);
+		}
 	}
 	/* create MLFB thread */
 	else {
-		pthread_create(&send_files, NULL, proc_mlfb, (void*) list);
+		for (int i=0; i<threads; i++) {
+			pthread_create(&send_files[i], NULL, proc_mlfb, (void*) list);
+		}
 	}
 
 	/* join threads*/
 	pthread_join(get_reqs, NULL);
-	pthread_join(send_files, NULL);
+	for (int i=0; i<threads;i++) {
+		pthread_join(send_files[i], NULL);
+	}
 }
+
