@@ -317,9 +317,11 @@ int main( int argc, char **argv ) {
 	int port;
 	int threads;
 	if (argc < 2) {
-		port = 38080;
-		scheduler = "SJF";
-		threads = 10;
+			printf("usage: ./sws [PORT] [SCHEDULER] [THREADS]\n...\n");
+			printf("will run with default values\n");
+			port = 38080;
+			scheduler = "SJF";
+			threads = 1;
 	}
 	else if (argc < 3) {
 		port = (int) strtol(argv[1], (char**)NULL,10);

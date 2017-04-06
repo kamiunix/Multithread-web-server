@@ -1,12 +1,12 @@
 # Targets & general dependencies
 PROGRAM = sws
 HEADERS = network.h datastruct.h
-OBJS =  sws.o network.o datastruct.o
-#ADD_OBJS = 
+OBJS = network.o sws.o datastruct.o
+ADD_OBJS = 
 
 # compilers, linkers, utilities, and flags
 CC = gcc
-CFLAGS = -Wall -g -lpthread
+CFLAGS = -Wall -g -lpthread -pthread
 COMPILE = $(CC) $(CFLAGS)
 LINK = $(CC) $(CFLAGS) -o $@ 
 

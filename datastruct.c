@@ -6,6 +6,7 @@
 #include "datastruct.h"
 
 void initClient(struct client* client) {
+	client->filename = (char*)malloc(sizeof(char)*128);
 	client->fd = 0;
 	client->fin = NULL;
 	client->rem = 0;
@@ -20,7 +21,7 @@ void initList(struct linkedlist* list) {
 
 //display client
 void printClient(struct client* client) {
-	printf("[%d, %p, %d, %d]",client->fd, client->fin, client->rem, client-> pos);
+	printf("[%s, %d, %p, %d, %d]",client->filename, client->fd, client->fin, client->rem, client-> pos);
 }
 
 //display the list
@@ -81,7 +82,7 @@ void insertFirst(struct linkedlist* list, struct client* client) {
 	list->size++;
 }
 
-//insert link at the last location
+//insert link at the first location
 void insertLast(struct linkedlist* list, struct client* client) {
 	//create a link
 	struct node *link = (struct node*) malloc(sizeof(struct node));
@@ -90,23 +91,28 @@ void insertLast(struct linkedlist* list, struct client* client) {
 
 	if (list->size == 0){
 		list->head = link;
-		link->next = NULL;
+		list->tail = link;
+		link->next = list->head;
+		link->prev = list->tail;
 	}
-
+	if (list->size == 1) {
+		list->tail = link;
+		list->head->prev = link;
+		list->head->next = link;
+		link->next = list->head;
+		link->prev = list->head;
+	}
 	else {
-		    /* 5. Else traverse till the last node */
-		while (link->next != NULL){
-      		  link = link->next;
-		}
-		link->next = link;
-		link->next=NULL;
-
+		link->next = list->head;
+		link->prev = list->tail;
+		list->tail->next = link;
+		list->head->prev = link;
+		list->tail = link;
 	}
 
 	//update size
 	list->size++;
 }
-
 
 struct client* getFirst(struct linkedlist* list) {
 	return list->head->client;
@@ -249,34 +255,28 @@ void sort(struct linkedlist* list) {
 int main() {
 	struct client *client1 = (struct client*) malloc(sizeof(struct client));
 	initClient(client1);
-
 	struct client *client2 = (struct client*) malloc(sizeof(struct client));
 	client2->fd = 0;
 	client2->fin = NULL;
 	client2->rem = 3;
 	client2->pos = 2;
-
 	struct client *client3 = (struct client*) malloc(sizeof(struct client));
 	client3->fd = 0;
 	client3->fin = NULL;
 	client3->rem = 6;
 	client3->pos = 3;
-
 	struct client *client4 = (struct client*) malloc(sizeof(struct client));
 	client4->fd = 0;
 	client4->fin = NULL;
 	client4->rem = 3;
 	client4->pos = 1;
-
 	struct client *client5 = (struct client*) malloc(sizeof(struct client));
 	client5->fd = 0;
 	client5->fin = NULL;
 	client5->rem = 5;
 	client5->pos = 2;
-
 	struct linkedlist *list = (struct linkedlist*) malloc(sizeof(struct linkedlist));
 	initList(list);
-
 	printList(list);
 	insertFirst(list, client1);
 	printList(list);

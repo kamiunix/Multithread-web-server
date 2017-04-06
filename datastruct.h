@@ -1,4 +1,5 @@
 struct client {
+	char *filename;
 	int fd;
 	FILE *fin;
 	int rem;
@@ -34,6 +35,9 @@ void rotate(struct linkedlist* list);
 
 //insert link at the first location
 void insertFirst(struct linkedlist* list, struct client* client);
+
+//insert link at the last location
+void insertLast(struct linkedlist* list, struct client* client);
 
 //return first client in list
 struct client* getFirst(struct linkedlist* list);
