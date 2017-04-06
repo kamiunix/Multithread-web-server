@@ -310,7 +310,7 @@ void *proc_mlfb( void* list ) {
 		}																		//First chunks finished
 
 	}
-	return;
+	return NULL;
 }
 
 /* This function is where the program starts running.
@@ -366,11 +366,13 @@ int main( int argc, char **argv ) {
 		threads = (int) strtol(argv[3], (char**)NULL,10);
 	}
 
-	printf("port: %d scheduler: %s threads: %d\n",port,scheduler,threads);
 
 	if (scheduler == NULL) {
 		printf("Unrecognized scheduling algorithm\n Choices are : SJF RR MLFB\n");
 		exit(1);
+	} else {
+		printf("port: %d scheduler: %s threads: %d\n",port,scheduler,threads);
+
 	}
 
 	struct linkedlist *list = (struct linkedlist*) malloc(sizeof(struct linkedlist));
