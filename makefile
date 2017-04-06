@@ -6,7 +6,7 @@ OBJS =  sws.o network.o datastruct.o
 
 # compilers, linkers, utilities, and flags
 CC = gcc
-CFLAGS = -Wall -g -lpthread
+CFLAGS = -Wall -g -lpthread -pthread
 COMPILE = $(CC) $(CFLAGS)
 LINK = $(CC) $(CFLAGS) -o $@ 
 
