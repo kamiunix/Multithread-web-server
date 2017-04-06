@@ -81,6 +81,30 @@ void insertFirst(struct linkedlist* list, struct client* client) {
 	list->size++;
 }
 
+//insert link at the last location
+void insertLast(struct linkedlist* list, struct client* client) {
+	//create a link
+	struct node *link = (struct node*) malloc(sizeof(struct node));
+
+	link->client = client;
+
+	if (list->size == 0){
+		list->head = link;
+		link->next = NULL;
+	} else {   /* 5. Else traverse till the last node */
+		while (link->next != NULL){
+      		  link = link->next;
+		}
+		link->next = link;
+		link->next=NULL;
+
+	}
+
+	//update size
+	list->size++;
+}
+
+
 struct client* getFirst(struct linkedlist* list) {
 	return list->head->client;
 }
