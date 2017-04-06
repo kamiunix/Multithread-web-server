@@ -200,8 +200,29 @@ void *proc_sjf( void* list ) {
 /* loop function to process clients using RR */
 void *proc_rr( void* list ) {
 	printf("Commencing RR scheduling\n");
+	int flag = 0;
 	for ( ;; ) {
-		//do stuff
+
+		while(length(list) > 0) {
+			//lock critical section
+			pthread_mutex_lock(&lock);
+
+			struct client *client = deleteFirst((struct linkedlist*) list);
+			//read from file in quantum
+
+			if(client->rem > 0){
+				insertLast((struct linkedlist*) list,client);
+			}
+			flag = 1;
+			pthread_mutex_unlock(&lock);
+			//unlock critical section
+
+			//send file to client
+			if (flag) {
+				serve_client(client, client->rem);
+				flag = 0;
+			}
+		}
 	}
 }
 
