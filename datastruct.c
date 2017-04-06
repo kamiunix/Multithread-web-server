@@ -6,6 +6,7 @@
 #include "datastruct.h"
 
 void initClient(struct client* client) {
+	client->filename = (char*)malloc(sizeof(char)*128);
 	client->fd = 0;
 	client->fin = NULL;
 	client->rem = 0;
@@ -20,7 +21,7 @@ void initList(struct linkedlist* list) {
 
 //display client
 void printClient(struct client* client) {
-	printf("[%d, %p, %d, %d]",client->fd, client->fin, client->rem, client-> pos);
+	printf("[%s, %d, %p, %d, %d]",client->filename, client->fd, client->fin, client->rem, client-> pos);
 }
 
 //display the list

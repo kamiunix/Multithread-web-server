@@ -74,6 +74,8 @@ static void check_client( struct client* client ) {
 	} else {                                          /* if so, open file */
 		req++;                                          /* skip leading / */
 		client->fin = fopen( req, "r" );                        /* open file */
+		char *filename = (char*)malloc(sizeof(char)*128);
+		strncpy(filename,req,127);
 		if( !client->fin ) {                                    /* check if successful */
 			len = sprintf( buffer, "HTTP/1.1 404 File not found\n\n" );  
 			write( client->fd, buffer, len );                     /* if not, send err */
@@ -88,6 +90,8 @@ static void check_client( struct client* client ) {
 			len = ftell(client->fin);
 			rewind(client->fin);
 			client->rem = len;
+			strncpy(client->filename,filename,127);
+			printf("received request for file %s\n",client->filename);
 		}
 	}
 }
@@ -152,7 +156,6 @@ void *get_clients( void* vargs) {
 
 		for( fd = network_open(); fd >= 0; fd = network_open() ) { /* get clients */
 			if (flag) {
-				printf("got client\n");
 				client = (struct client*) malloc(sizeof(struct client));
 				initClient(client);
 				client->fd = fd;
@@ -189,7 +192,7 @@ void *proc_sjf( void* list ) {
 			if (flag) {
 				int size = client->rem;
 				serve_client(client, client->rem);
-				printf("%p sent %d bytes of file to\n",&client ,size);
+				printf("%p sent %d bytes of file %s\n",&client ,size, client->filename);
 				flag = 0;
 			}
 		}
@@ -220,10 +223,12 @@ void *proc_rr( void* list ) {
 				
 				if(client->rem < quantum){					
 					serve_client(client, client->rem);
+					printf("%p sent %d bytes of file %s\n",&client ,client->rem, client->filename);
 				}
 				else{
 					serve_client(client, quantum);
 					insertLast((struct linkedlist*) list,client);
+					printf("%p sent %d bytes of file %s\n",&client ,quantum, client->filename);
 				}
 				flag = 0;
 			}

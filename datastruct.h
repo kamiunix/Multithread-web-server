@@ -1,5 +1,5 @@
 struct client {
-	char* filename;
+	char *filename;
 	int fd;
 	FILE *fin;
 	int rem;
