@@ -239,9 +239,78 @@ void *proc_rr( void* list ) {
 /* loop function to process clients using MLFB */
 void *proc_mlfb( void* list ) {
 	printf("Commencing MLFB scheduling\n");
+	int flag = 0;
+	int count1;																	//Counter
+	int count2;																	//Goal
+	struct linkedlist *list2 = (struct linkedlist*) malloc(sizeof(struct linkedlist));	//List to hold clients for chunk 2
+	initList(list2);
+	struct linkedlist *list3 = (struct linkedlist*) malloc(sizeof(struct linkedlist));  //List to hold clients for chunk 3
+	initList(list3);
+
 	for ( ;; ) {
-		//do stuff
+		while(length(list) > 0) {												//Process the incoming client list for the first chunk.
+			pthread_mutex_lock(&lock);											//Critical section lock
+			flag = 0;															//Reset the flag
+			struct client *client = deleteFirst((struct linkedlist*) list);		//Pop a client from the incoming list
+			if(client->rem > 0){												//If there is data remaining for the client
+				if(client->rem > MLFB_FIRST){									//If the amount of file remaining is greater than the first chunk limit
+					insertLast((struct linkedlist*) list2,client);				//Add the client to the quantum 2 list
+				}
+				flag=1;															//Set the flag for this client
+			}
+			pthread_mutex_unlock(&lock);										//Critical section unlock
+			if (flag) {															//If flag is set, send data to the client
+				if(MLFB_FIRST>=MAX_HTTP_SIZE){									//If MLFB_FIRST is greater than MAX_HTTP_SIZE, then call client serve more than once
+					count2=MLFB_FIRST/MAX_HTTP_SIZE;
+				} else {
+					count2 = 1;
+				}
+				for (count1 = 1; count1<= count2; count1++){					//call serve enough times to send MLFB_FIRST bytes
+					serve_client(client, client->rem);							//Call the MLFB server for 1st chunk
+				}
+				flag = 0;														//Reset the flag
+			}
+		}																		//First chunks finished
+		while(length(list2) > 0) {												//Process list2 for the second chunk.
+			pthread_mutex_lock(&lock);											//Critical section lock
+			flag = 0;															//Reset the flag
+			struct client *client = deleteFirst((struct linkedlist*) list2);	//Pop a client from list2
+			if(client->rem > 0){												//If there is data remaining for the client
+				if(client->rem > MLFB_SECOND){									//If the amount of file remaining is greater than the first chunk limit
+					insertLast((struct linkedlist*) list3,client);				//Add the client to the quantum 3 list
+				}
+				flag=1;															//Set the flag for this client
+			}
+			pthread_mutex_unlock(&lock);										//Critical section unlock
+			if (flag) {															//If flag is set, send data to the client
+				if(MLFB_SECOND>=MAX_HTTP_SIZE){									//If MLFB_FIRST is greater than MAX_HTTP_SIZE, then call client serve more than once
+					count2=MLFB_SECOND/MAX_HTTP_SIZE;
+				} else {
+					count2 = 1;
+				}
+				for (count1 = 1; count1<= count2; count1++){					//call serve enough times to send MLFB_SECOND bytes
+					serve_client(client, client->rem);							//Call the MLFB server for 1st chunk
+				}
+				flag = 0;														//Reset the flag
+			}
+		}																		//First chunks finished
+		while(length(list3) > 0) {												//Process list3 for the last chunk.
+			pthread_mutex_lock(&lock);											//Critical section lock
+			flag = 0;															//Reset the flag
+			struct client *client = deleteFirst((struct linkedlist*) list3);	//Pop a client from list3
+			if(client->rem > 0){												//If there is data remaining for the client
+				insertLast((struct linkedlist*) list3,client);					//Put the client back into the end of the list
+				flag=1;															//Set the flag for this client
+			}
+			pthread_mutex_unlock(&lock);										//Critical section unlock
+			if (flag) {															//If flag is set, send data to the client
+				serve_client(client, client->rem);								//Call the MLFB server for 1st chunk
+				flag = 0;														//Reset the flag
+			}
+		}																		//First chunks finished
+
 	}
+	return;
 }
 
 /* This function is where the program starts running.
