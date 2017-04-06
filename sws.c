@@ -129,6 +129,11 @@ static int serve_client( struct client* client, int mss ) {
       n -= len;
     }
   } while( ( n > 0 ) && ( len == MAX_HTTP_SIZE ) );  /* the last chunk < 8192 */
+  
+  if (client->rem == 0) {
+	  close(client->fd);
+	  fclose(client->fin);
+  }
 
   return 1;
 }
@@ -185,8 +190,6 @@ void *proc_sjf( void* list ) {
 				int size = client->rem;
 				serve_client(client, client->rem);
 				printf("%p sent %d bytes of file to\n",&client ,size);
-				fclose(client->fin);
-				close(client->fd);
 				flag = 0;
 			}
 		}
