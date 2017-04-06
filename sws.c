@@ -28,6 +28,7 @@ struct args {
 };
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t client_lock = PTHREAD_MUTEX_INITIALIZER;
 
 
 /* This function takes a file handle to a client, reads in the request, 
@@ -73,7 +74,11 @@ static void check_client( struct client* client ) {
 		write( client->fd, buffer, len );                       /* if not, send err */
 	} else {                                          /* if so, open file */
 		req++;                                          /* skip leading / */
+		//lock critical section
+		pthread_mutex_lock(&client_lock);
 		client->fin = fopen( req, "r" );                        /* open file */
+		pthread_mutex_unlock(&client_lock);
+		//unlock critical section
 		char *filename = (char*)malloc(sizeof(char)*128);
 		strncpy(filename,req,127);
 		if( !client->fin ) {                                    /* check if successful */
@@ -86,9 +91,13 @@ static void check_client( struct client* client ) {
 			write( client->fd, buffer, len );
 
 			//check size of file and rewind fin
+			//lock critical section
+			pthread_mutex_lock(&client_lock);
 			fseek(client->fin,0,SEEK_END);
 			len = ftell(client->fin);
 			rewind(client->fin);
+			pthread_mutex_unlock(&client_lock);
+			//unlock critical section
 			client->rem = len;
 			strncpy(client->filename,filename,127);
 			printf("received request for file %s\n",client->filename);
@@ -120,7 +129,11 @@ static int serve_client( struct client* client, int mss ) {
 
   do {                                              /* loop, read & send file */
     len = n < MAX_HTTP_SIZE ? n : MAX_HTTP_SIZE;    /* how much to read */
+	 //lock critical section
+	 pthread_mutex_lock(&client_lock);
     len = fread( buffer, 1, len, client->fin );         /* read file chunk */
+	 pthread_mutex_unlock(&client_lock);
+	 //unlock critical section
     if( len < 1 ) {                                 /* check for errors */
       perror( "error reading file" );
       return 0;
