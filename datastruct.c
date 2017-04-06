@@ -91,7 +91,10 @@ void insertLast(struct linkedlist* list, struct client* client) {
 	if (list->size == 0){
 		list->head = link;
 		link->next = NULL;
-	} else {   /* 5. Else traverse till the last node */
+	}
+
+	else {
+		    /* 5. Else traverse till the last node */
 		while (link->next != NULL){
       		  link = link->next;
 		}
