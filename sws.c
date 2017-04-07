@@ -23,6 +23,7 @@
 #define MAX_HTTP_SIZE 8192                 /* size of buffer to allocate */
 #define MLFB_FIRST 8192
 #define MLFB_SECOND 65536
+#define RR_QUANTUM 8192
 
 /* struct to hold cli arguments passed to threads */
 struct args {
