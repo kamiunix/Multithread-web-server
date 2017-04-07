@@ -140,6 +140,7 @@ static int serve_client( struct client* client, int mss ) {
   } while( ( n > 0 ) && ( len == MAX_HTTP_SIZE ) );  /* the last chunk < 8192 */
   
   if (client->rem == 0) {
+	   printf("Request for file %s completed.\n",client->filename); 
 	  close(client->fd);
 	  fclose(client->fin);
   }
@@ -175,6 +176,7 @@ void *get_clients( void* vargs) {
 			//lock critical section
 			pthread_mutex_lock(&lock);
 			insertFirst(args->list, client);
+			printf("Request for file %s admitted\n",client->filename);
 			flag = 1;
 			pthread_mutex_unlock(&lock);
 			//unlock critical section
@@ -184,7 +186,7 @@ void *get_clients( void* vargs) {
 
 /* loop function to process clients using SJF */
 void *proc_sjf( void* list ) {
-	printf("Commencing SJF scheduling\n");
+	//printf("Commencing SJF scheduling\n");
 	int flag = 0;
 	srand(time(NULL));
 	for( ;; ) {                                       /* main SJF loop */
@@ -210,7 +212,7 @@ void *proc_sjf( void* list ) {
 				serve_client(client, client->rem);
 	 			pthread_mutex_unlock(&client_lock);
 	 			//unlock critical section
-				printf("%p sent %d bytes of file %s\n",&client ,size, client->filename);
+				printf("Sent %d bytes of file %s\n",size, client->filename); 
 				flag = 0;
 			}
 		}
@@ -219,19 +221,18 @@ void *proc_sjf( void* list ) {
 
 /* loop function to process clients using RR */
 void *proc_rr( void* list ) {
-	printf("Commencing RR scheduling\n");
-	int flag = 0;
-	int quantum = 8192; 
- 	
+	//printf("Commencing RR scheduling\n");
+	int flag = 0; 
+ 	srand(time(NULL));
 	for ( ;; ) {
-		
+		int r = rand() % 1000;
+		usleep(r);
 		while(length(list) > 0) {
 			//lock critical section
 			pthread_mutex_lock(&lock);
 			
 			struct client *client = deleteFirst((struct linkedlist*) list);
-			//read from file in quantum
-						
+			//read from file in quantum						
 			flag = 1;
 			pthread_mutex_unlock(&lock);
 			//unlock critical section
@@ -239,96 +240,175 @@ void *proc_rr( void* list ) {
 			//send file to client
 			if (flag) {
 				
-				if(client->rem < quantum){					
+				if(client->rem <= RR_QUANTUM && client->rem > 0 && client->fd >0){
+					
+ 					printf("Sent %d bytes of file %s \n",client->rem, client->filename);
+					pthread_mutex_lock(&client_lock);	
 					serve_client(client, client->rem);
-					printf("%p sent %d bytes of file %s\n",&client ,client->rem, client->filename);
+					pthread_mutex_unlock(&client_lock);
+					
 				}
-				else{
-					serve_client(client, quantum);
-					insertLast((struct linkedlist*) list,client);
-					printf("%p sent %d bytes of file %s\n",&client ,quantum, client->filename);
+				else{				
+									
+					if(client->rem > 0 && client->fd >0){	
+						//lock critical section
+					        pthread_mutex_lock(&client_lock);
+						serve_client(client, RR_QUANTUM);	
+						pthread_mutex_unlock(&client_lock);
+						
+						pthread_mutex_lock(&lock);
+						if(client->fd >0)
+							insertLast((struct linkedlist*) list,client);	
+						pthread_mutex_unlock(&lock);	
+						printf("Sent %d bytes of file %s \n",RR_QUANTUM, client->filename);	
+							
+						//unlock critical section		
+					}
+									
+					
 				}
 				flag = 0;
 			}
-		}
+		}//while ends
 	}
 }
 
-/* loop function to process clients using MLFB */
+
 void *proc_mlfb( void* list ) {
-	printf("Commencing MLFB scheduling\n");
+	//printf("Commencing MLFB scheduling\n");
 	int flag = 0;
-	int count1;																	//Counter
-	int count2;																	//Goal
 	struct linkedlist *list2 = (struct linkedlist*) malloc(sizeof(struct linkedlist));	//List to hold clients for chunk 2
 	initList(list2);
 	struct linkedlist *list3 = (struct linkedlist*) malloc(sizeof(struct linkedlist));  //List to hold clients for chunk 3
 	initList(list3);
-
+	
 	for ( ;; ) {
-		while(length(list) > 0) {												//Process the incoming client list for the first chunk.
-			pthread_mutex_lock(&lock);											//Critical section lock
-			flag = 0;															//Reset the flag
-			struct client *client = deleteFirst((struct linkedlist*) list);		//Pop a client from the incoming list
-			if(client->rem > 0){												//If there is data remaining for the client
-				if(client->rem > MLFB_FIRST){									//If the amount of file remaining is greater than the first chunk limit
-					insertLast((struct linkedlist*) list2,client);				//Add the client to the quantum 2 list
+		
+		
+		while(length(list) > 0) {
+			//lock critical section
+			pthread_mutex_lock(&lock);
+			
+			struct client *client = deleteFirst((struct linkedlist*) list);
+			//read from file in quantum						
+			flag = 1;
+			pthread_mutex_unlock(&lock);
+			//unlock critical section
+
+			//send file to client
+			if (flag) {
+
+				if(client->rem <= MLFB_FIRST && client->rem > 0){
+					
+ 					printf("Sent %d bytes of file %s \n",client->rem, client->filename);
+					pthread_mutex_lock(&client_lock);	
+					serve_client(client, client->rem);
+					pthread_mutex_unlock(&client_lock);
+					
 				}
-				flag=1;															//Set the flag for this client
-			}
-			pthread_mutex_unlock(&lock);										//Critical section unlock
-			if (flag) {															//If flag is set, send data to the client
-				if(MLFB_FIRST>=MAX_HTTP_SIZE){									//If MLFB_FIRST is greater than MAX_HTTP_SIZE, then call client serve more than once
-					count2=MLFB_FIRST/MAX_HTTP_SIZE;
-				} else {
-					count2 = 1;
+				else{				
+								
+					if(client->rem > 0){	
+						//lock critical section
+					        pthread_mutex_lock(&client_lock);
+						serve_client(client, MLFB_FIRST);	
+						pthread_mutex_unlock(&client_lock);
+						
+						pthread_mutex_lock(&lock);
+						insertLast((struct linkedlist*) list2,client);	
+						pthread_mutex_unlock(&lock);	
+						printf("Sent %d bytes of file %s \n",MLFB_FIRST, client->filename);	
+							
+						//unlock critical section		
+					}
+									
+					
 				}
-				for (count1 = 1; count1<= count2; count1++){					//call serve enough times to send MLFB_FIRST bytes
-					serve_client(client, client->rem);							//Call the MLFB server for 1st chunk
+				flag = 0;
+			}
+				
+		}//while ends
+
+
+		//pthread_mutex_unlock(&lock);
+		while(length(list2) > 0) {
+			//lock critical section
+			pthread_mutex_lock(&lock);
+			
+			struct client *client = deleteFirst((struct linkedlist*) list2);
+			//read from file in quantum						
+			flag = 1;
+			pthread_mutex_unlock(&lock);
+			//unlock critical section
+
+			//send file to client
+			if (flag) {
+
+				if(client->rem <= MLFB_SECOND && client->rem > 0){
+					
+ 					printf("Sent %d bytes of file %s \n",client->rem, client->filename);
+					pthread_mutex_lock(&client_lock);	
+					serve_client(client, client->rem);
+					pthread_mutex_unlock(&client_lock);
+					
 				}
-				flag = 0;														//Reset the flag
-			}
-		}																		//First chunks finished
-		while(length(list2) > 0) {												//Process list2 for the second chunk.
-			pthread_mutex_lock(&lock);											//Critical section lock
-			flag = 0;															//Reset the flag
-			struct client *client = deleteFirst((struct linkedlist*) list2);	//Pop a client from list2
-			if(client->rem > 0){												//If there is data remaining for the client
-				if(client->rem > MLFB_SECOND){									//If the amount of file remaining is greater than the first chunk limit
-					insertLast((struct linkedlist*) list3,client);				//Add the client to the quantum 3 list
+				else{				
+									
+					if(client->rem > 0){	
+						//lock critical section
+					        pthread_mutex_lock(&client_lock);
+						serve_client(client, MLFB_SECOND);	
+						pthread_mutex_unlock(&client_lock);
+						
+						pthread_mutex_lock(&lock);
+						insertLast((struct linkedlist*) list3,client);	
+						pthread_mutex_unlock(&lock);	
+						printf("Sent %d bytes of file %s \n",MLFB_SECOND, client->filename);	
+							
+						//unlock critical section		
+					}
+									
+					
 				}
-				flag=1;															//Set the flag for this client
+				flag = 0;
 			}
-			pthread_mutex_unlock(&lock);										//Critical section unlock
-			if (flag) {															//If flag is set, send data to the client
-				if(MLFB_SECOND>=MAX_HTTP_SIZE){									//If MLFB_FIRST is greater than MAX_HTTP_SIZE, then call client serve more than once
-					count2=MLFB_SECOND/MAX_HTTP_SIZE;
-				} else {
-					count2 = 1;
+				
+		}//while ends
+
+
+
+		while(length(list3) > 0) {
+			//lock critical section
+			pthread_mutex_lock(&lock);
+			
+			struct client *client = deleteFirst((struct linkedlist*) list3);
+			//read from file in quantum						
+			flag = 1;
+			pthread_mutex_unlock(&lock);
+			//unlock critical section
+
+			//send file to client
+			if (flag) {
+				
+				if(client->rem > 0){	
+					//lock critical section
+					pthread_mutex_lock(&client_lock);
+					serve_client(client, client->rem);	
+					pthread_mutex_unlock(&client_lock);
+										
+					printf("Sent %d bytes of file %s \n",client->rem, client->filename);	
+						
+					//unlock critical section		
 				}
-				for (count1 = 1; count1<= count2; count1++){					//call serve enough times to send MLFB_SECOND bytes
-					serve_client(client, client->rem);							//Call the MLFB server for 1st chunk
-				}
-				flag = 0;														//Reset the flag
+									
+					
 			}
-		}																		//First chunks finished
-		while(length(list3) > 0) {												//Process list3 for the last chunk.
-			pthread_mutex_lock(&lock);											//Critical section lock
-			flag = 0;															//Reset the flag
-			struct client *client = deleteFirst((struct linkedlist*) list3);	//Pop a client from list3
-			if(client->rem > 0){												//If there is data remaining for the client
-				insertLast((struct linkedlist*) list3,client);					//Put the client back into the end of the list
-				flag=1;															//Set the flag for this client
-			}
-			pthread_mutex_unlock(&lock);										//Critical section unlock
-			if (flag) {															//If flag is set, send data to the client
-				serve_client(client, client->rem);								//Call the MLFB server for 1st chunk
-				flag = 0;														//Reset the flag
-			}
-		}																		//First chunks finished
+			flag = 0;
+						
+		}//while ends
 
 	}
-	return NULL;
+
 }
 
 /* This function is where the program starts running.
@@ -381,6 +461,7 @@ int main( int argc, char **argv ) {
 				scheduler = argv[2];
 			}
 		}
+		scheduler = argv[2];
 		threads = (int) strtol(argv[3], (char**)NULL,10);
 	}
 
